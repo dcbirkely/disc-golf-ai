@@ -106,9 +106,5 @@ if user_input:
             st.info("Ingen passende treff i databasen. Bruk tallene over som guide i butikk/nettbutikk.")
     else:
         st.warning("Klarte ikke å tolke forespørselen til flight numbers.")
-    else:
-        st.warning("Vi fant ingen helt like disker, men her er noen anbefalte alternativer.")
-        fallback = df[df["Speed"] <= 9].sort_values(by=["Speed", "Fade"])
-        st.dataframe(fallback[["NAME", "Speed", "Glide", "Turn", "Fade", "CATEGORY", "Main Flight Tag"]].head(5))
 
 
