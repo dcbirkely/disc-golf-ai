@@ -1,137 +1,146 @@
 import streamlit as st
 import pandas as pd
+import difflib
 
-# Load disc data from Excel
-st.title("Disc Golf Disc Recommender")
+st.set_page_config(page_title="Disc Golf AI Recommender", layout="wide")
 
-# Load file
-uploaded_file = "discer data.xlsx"
-df = pd.read_excel(uploaded_file)
+st.title("Disc Golf Disc Recommender 🥏")
 
-# Filters
+# Load Excel
+file = "discer data.xlsx"
+df = pd.read_excel(file)
+
+# Keyword maps for Norwegian support
+norwegian_keywords = {
+    "driver": ["driver"],
+    "midrange": ["midrange", "mellomdistanse"],
+    "putter": ["putter"],
+    "straight": ["rett", "rett frem", "straight"],
+    "hyzer": ["hyzer"],
+    "hyzer flip": ["hyzer flip"],
+    "turnover": ["anhyzer", "turnover"],
+    "roller": ["roller", "rulle"],
+    "flex shot": ["flex shot", "flex"],
+    "skip finish": ["skip", "skip finish"],
+    "headwind": ["motvind", "headwind"],
+    "tailwind": ["medvind", "tailwind"]
+}
+
+# UI sidebar
 st.sidebar.header("Filter Discs")
 wind = st.sidebar.selectbox("Wind conditions", ["Any", "Calm", "Headwind", "Tailwind"])
-flight_path = st.sidebar.selectbox("Preferred Flight Path", [
-    "Any", "Straight", "Hyzer", "Hyzer Flip", "Turnover", "Flex Shot", "Roller", "Skip Finish"])
+flight_path = st.sidebar.selectbox("Preferred Flight Path", ["Any", "Straight", "Hyzer", "Hyzer Flip", "Turnover", "Flex Shot", "Roller", "Skip Finish"])
 skill = st.sidebar.selectbox("Skill level", ["Any", "Beginner", "Intermediate"])
 disc_category = st.sidebar.selectbox("Disc category", ["All", "Drivers", "Midrange", "Putters"])
 
-# Apply filters
 filtered = df.copy()
 
-# Skill-based filter (based on Speed)
 if skill == "Beginner":
     filtered = filtered[filtered["Speed"] <= 9]
 elif skill == "Intermediate":
     filtered = filtered[filtered["Speed"] <= 11]
 
-# Wind filter
 if wind == "Headwind":
     filtered = filtered[(filtered["Turn"] >= 0) & (filtered["Fade"] >= 3)]
 elif wind == "Tailwind":
     filtered = filtered[(filtered["Turn"] <= -2) & (filtered["Fade"] <= 2)]
 
-# Category filter
 if disc_category != "All":
     keyword = f"disc golf - {disc_category.lower()}"
     filtered = filtered[filtered["CATEGORY"].str.lower().str.strip().str.contains(keyword)]
 
-# Flight path filter
 if flight_path != "Any":
     filtered = filtered[filtered["Main Flight Tag"].str.contains(flight_path, case=False, na=False)]
 
-# Show filtered results
 st.subheader("Matching Discs from Your Collection:")
 if filtered.empty:
     st.warning("No discs matched your filters. Try adjusting skill level, category, or flight path.")
 else:
     st.dataframe(filtered[["NAME", "Speed", "Glide", "Turn", "Fade", "CATEGORY", "Main Flight Tag"]])
 
-# Smart text input
-st.header("Describe the Shot You Want")
-user_input = st.text_input("Example: 'I want a hyzer flip driver for calm wind'")
+st.header("🧠 Describe the Shot You Want (works in English or Norwegian)")
+user_input = st.text_input("Example: 'jeg vil ha en driver for rett kast i medvind'")
 
 if user_input:
-    ui = user_input.lower()
-
-    # Initial defaults
-    estimated = {
+    input_text = user_input.lower()
+    estimate = {
         "type": "Any",
+        "flight_tag": "Any",
         "speed": 7,
-        "glide": 5,
         "turn": 0,
-        "fade": 2,
-        "flight_tag": "Any"
+        "fade": 2
     }
 
-    if "putter" in ui:
-        estimated["type"] = "Putters"
-        estimated["speed"] = 2
-    elif "midrange" in ui or "approach" in ui:
-        estimated["type"] = "Midrange"
-        estimated["speed"] = 5
-    elif "driver" in ui:
-        estimated["type"] = "Drivers"
-        estimated["speed"] = 9
+    def match_keyword(text):
+        for tag, words in norwegian_keywords.items():
+            for word in words:
+                if word in text:
+                    return tag
+        return None
 
-    if "hyzer flip" in ui:
-        estimated["flight_tag"] = "Hyzer Flip"
-        estimated["turn"] = -3
-        estimated["fade"] = 1
-    elif "turnover" in ui or "anhyzer" in ui:
-        estimated["flight_tag"] = "Turnover"
-        estimated["turn"] = -3
-        estimated["fade"] = 0
-    elif "flex" in ui:
-        estimated["flight_tag"] = "Flex Shot"
-        estimated["turn"] = -2
-        estimated["fade"] = 3
-    elif "roller" in ui:
-        estimated["flight_tag"] = "Roller"
-        estimated["turn"] = -4
-        estimated["fade"] = 1
-    elif "straight" in ui:
-        estimated["flight_tag"] = "Straight"
-        estimated["turn"] = -1
-        estimated["fade"] = 1
-    elif "hyzer" in ui:
-        estimated["flight_tag"] = "Hyzer"
-        estimated["turn"] = 0
-        estimated["fade"] = 3
-    elif "skip" in ui:
-        estimated["flight_tag"] = "Skip Finish"
-        estimated["fade"] = 4
+    # Match disc type
+    for t in ["putter", "midrange", "driver"]:
+        if any(w in input_text for w in norwegian_keywords[t]):
+            estimate["type"] = t.title()
+            if t == "putter": estimate["speed"] = 2
+            if t == "midrange": estimate["speed"] = 5
+            if t == "driver": estimate["speed"] = 9
+            break
 
-    if "headwind" in ui:
-        estimated["turn"] = max(estimated["turn"], 0)
-        estimated["fade"] = max(estimated["fade"], 3)
-    elif "tailwind" in ui:
-        estimated["turn"] = min(estimated["turn"], -2)
-        estimated["fade"] = min(estimated["fade"], 2)
+    # Match flight tag
+    tag_found = None
+    for tag in ["hyzer flip", "turnover", "flex shot", "roller", "straight", "hyzer", "skip finish"]:
+        if any(w in input_text for w in norwegian_keywords[tag]):
+            estimate["flight_tag"] = tag.title()
+            tag_found = tag
+            break
 
-    # Show estimation
-    st.subheader("Estimated Flight Numbers")
-    st.markdown(f"- Type: **{estimated['type']}**")
-    st.markdown(f"- Speed: **{estimated['speed']}**")
-    st.markdown(f"- Turn: **{estimated['turn']}**, Fade: **{estimated['fade']}**")
+    # Estimate numbers by flight tag
+    if tag_found == "hyzer flip":
+        estimate["turn"] = -3; estimate["fade"] = 1
+    elif tag_found == "turnover":
+        estimate["turn"] = -3; estimate["fade"] = 0
+    elif tag_found == "flex shot":
+        estimate["turn"] = -2; estimate["fade"] = 3
+    elif tag_found == "roller":
+        estimate["turn"] = -4; estimate["fade"] = 1
+    elif tag_found == "straight":
+        estimate["turn"] = -1; estimate["fade"] = 1
+    elif tag_found == "hyzer":
+        estimate["turn"] = 0; estimate["fade"] = 3
+    elif tag_found == "skip finish":
+        estimate["fade"] = 4
 
-    # Filter using estimation
+    if any(w in input_text for w in norwegian_keywords["headwind"]):
+        estimate["turn"] = max(estimate["turn"], 0)
+        estimate["fade"] = max(estimate["fade"], 3)
+    elif any(w in input_text for w in norwegian_keywords["tailwind"]):
+        estimate["turn"] = min(estimate["turn"], -2)
+        estimate["fade"] = min(estimate["fade"], 2)
+
+    st.subheader("🧩 Estimated Flight Parameters")
+    st.markdown(f"- Type: **{estimate['type']}**")
+    st.markdown(f"- Turn: **{estimate['turn']}**, Fade: **{estimate['fade']}**")
+    st.markdown(f"- Tag: **{estimate['flight_tag']}**")
+
     result = df[
-        (df["Speed"] >= estimated["speed"] - 1) & (df["Speed"] <= estimated["speed"] + 1) &
-        (df["Turn"] >= estimated["turn"] - 1) & (df["Turn"] <= estimated["turn"] + 1) &
-        (df["Fade"] >= estimated["fade"] - 1) & (df["Fade"] <= estimated["fade"] + 1)
+        (df["Speed"] >= estimate["speed"] - 1) & (df["Speed"] <= estimate["speed"] + 1) &
+        (df["Turn"] >= estimate["turn"] - 1) & (df["Turn"] <= estimate["turn"] + 1) &
+        (df["Fade"] >= estimate["fade"] - 1) & (df["Fade"] <= estimate["fade"] + 1)
     ]
 
-    if estimated["type"] != "Any":
-        result = result[result["CATEGORY"].str.lower().str.contains(estimated["type"].lower())]
+    if estimate["type"] != "Any":
+        result = result[result["CATEGORY"].str.lower().str.contains(estimate["type"].lower())]
 
-    if estimated["flight_tag"] != "Any":
-        result = result[result["Main Flight Tag"].str.contains(estimated['flight_tag'], case=False, na=False)]
+    if estimate["flight_tag"] != "Any":
+        result = result[result["Main Flight Tag"].str.contains(estimate["flight_tag"], case=False, na=False)]
 
-    st.subheader("Recommended Discs:")
+    st.subheader("🎯 Recommended Discs:")
     if not result.empty:
         st.dataframe(result[["NAME", "Speed", "Glide", "Turn", "Fade", "CATEGORY", "Main Flight Tag"]])
     else:
-        st.warning("No discs matched your description. Try changing your input or adding more discs to the database.")
+        st.warning("Vi fant ingen helt like disker, men her er noen anbefalte alternativer.")
+        fallback = df[df["Speed"] <= 9].sort_values(by=["Speed", "Fade"])
+        st.dataframe(fallback[["NAME", "Speed", "Glide", "Turn", "Fade", "CATEGORY", "Main Flight Tag"]].head(5))
 
 
